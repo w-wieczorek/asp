@@ -1,6 +1,6 @@
 # asp
 
-TODO: Write a description here
+This [Crystal](https://crystal-lang.org/) module consists of the set of classes to modeling optimization problems by means of [Answer Set Programming](https://en.wikipedia.org/wiki/Answer_set_programming).
 
 ## Installation
 
@@ -36,4 +36,4 @@ TODO: Write development instructions here
 
 ## Contributors
 
-- [your-name-here](https://github.com/your-github-user) - creator and maintainer
+- [Wojciech Wieczorek](https://github.com/w-wieczorek) - creator and maintainer
