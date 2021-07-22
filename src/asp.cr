@@ -113,7 +113,7 @@ module Asp
     end
   end
 
-  def reduct(pi : Set(Rule), x : Set(Atom)) : Set(Rule)
+  def self.reduct(pi : Set(Rule), x : Set(Atom)) : Set(Rule)
     result = Set(Rule).new
     pi.each do |r|
       unless x.intersects? r[:negatives] 

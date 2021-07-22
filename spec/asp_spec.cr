@@ -14,8 +14,7 @@ describe Asp do
 
   it "adds facts and constraints to a logic program" do
     model = Asp::Program.new
-    names = ["Ala", "Ewa", "Adam"]
-    idx_arr = Array({Int32, String}).new(3) { |i| {i, names[i]} }
+    idx_arr = (0..2).zip ["Ala", "Ewa", "Adam"]
     person = Asp::LiteralFactory.new idx_arr
     model.addFact person[{0, "Ala"}]
     model.addConstraint person[{1, "Ewa"}], ~person[{2, "Adam"}]
@@ -33,24 +32,26 @@ describe Asp do
   it "computes reduct" do
     model = Asp::Program.new
     idx_arr = [:a, :b]
-    idx_arr2 = Array(Symbol).new(4)
-    idx.arr.each do |i|
-      idx_arr.each { |j| idx_arr2 << {i, j} }
-    end
+    idx_arr2 = idx_arr.each_repeated_combination.to_a.map{ |pair| Tuple(Symbol, Symbol).from pair }
     el = Asp::LiteralFactory.new idx_arr
     equal = Asp::LiteralFactory.new idx_arr2
     neq = Asp::LiteralFactory.new idx_arr2
     idx_arr.each do |i|
-      model.addFact el[i] 
+      model.addFact el[i]
       model.addRule el[i], implies: equal[{i, i}]
       idx_arr.each do |j|
         model.addRule el[i], el[j], ~equal[{i, j}], implies: neq[{i, j}]
       end
     end
-    expected = Set(Rule).new
+    expected = Set(Asp::Rule).new
     expected.add({head: el[:a].atom, positives: Asp::EMPTY, negatives: Asp::EMPTY})
     expected.add({head: el[:b].atom, positives: Asp::EMPTY, negatives: Asp::EMPTY})
     expected.add({head: equal[{:a, :a}].atom, positives: Set{el[:a].atom}, negatives: Asp::EMPTY})
     expected.add({head: equal[{:b, :b}].atom, positives: Set{el[:b].atom}, negatives: Asp::EMPTY})
+    expected.add({head: neq[{:a, :b}].atom, positives: Set{el[:a].atom, el[:b].atom}, negatives: Asp::EMPTY})
+    expected.add({head: neq[{:b, :a}].atom, positives: Set{el[:a].atom, el[:b].atom}, negatives: Asp::EMPTY})
+    x = Set{equal[{:a, :a}].atom, equal[{:b, :b}].atom, el[:a].atom, el[:b].atom, neq[{:a, :b}].atom, neq[{:b, :a}].atom}
+    computed = Asp.reduct(model.rules, x)
+    computed.should eq(expected)
   end
 end
