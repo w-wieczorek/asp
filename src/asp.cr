@@ -1,5 +1,5 @@
 module Asp
-  alias Atom = Tuple(UInt64, UInt64)
+  alias Atom = UInt64
   alias Rule = NamedTuple(head: Atom, positives: Set(Atom), negatives: Set(Atom))
 
   struct Literal
@@ -15,7 +15,7 @@ module Asp
   end
 
   EMPTY = Set(Atom).new
-  DUMMY = Literal.new({0_u64, 0_u64}, false)
+  DUMMY = Literal.new(0_u64, false)
   
   class LiteralFactory
     property indices : Array(UInt64)
@@ -45,8 +45,37 @@ module Asp
     end
 
     def [](idx : Object) : Literal
-      Literal.new({self.object_id, idx.hash}, false)
+      x0 = self.object_id.to_u128
+      x1 = idx.hash.to_u128
+      v = (x0 * 4029721224409075548 + x1 * 5440965862096952843) % 18446744073709551557
+      Literal.new(v.to_u64, false)
     end
+  end
+
+  def self.reduct(pi : Set(Rule), x : Set(Atom)) : Set(Rule)
+    result = Set(Rule).new
+    pi.each do |r|
+      unless x.intersects? r[:negatives] 
+        result.add({head: r[:head], positives: r[:positives], negatives: EMPTY})
+      end
+    end
+    result
+  end
+
+  def self.cn(p)
+    x = Set(Atom).new
+    finish_loop = false
+    until finish_loop
+      finish_loop = true
+      p.each do |r|
+        if r[:positives].subset_of? x
+          if x.add? r[:head]
+            finish_loop = false
+          end 
+        end
+      end
+    end
+    x
   end
 
   class Program
@@ -111,15 +140,5 @@ module Asp
         Stop
       end
     end
-  end
-
-  def self.reduct(pi : Set(Rule), x : Set(Atom)) : Set(Rule)
-    result = Set(Rule).new
-    pi.each do |r|
-      unless x.intersects? r[:negatives] 
-        result.add({head: r[:head], positives: r[:positives], negatives: EMPTY})
-      end
-    end
-    result
   end
 end
