@@ -78,6 +78,28 @@ module Asp
     x
   end
 
+  def self.narrow(pi, lb, ub)
+    u_changed = true
+    l_changed = true
+    pi_u = Set(Rule).new
+    pi_l = Set(Rule).new
+    while u_changed || l_changed
+      if u_changed
+        pi_u = reduct pi, ub
+      end
+      if l_changed
+        pi_l = reduct pi, lb
+      end
+      before_size = lb.size
+      lb.concat(cn pi_u)
+      l_changed = (lb.size != before_size)
+      before_size = ub.size
+      ub = ub & cn(pi_l)
+      u_changed = (ub.size != before_size)
+    end
+    {lb, ub}
+  end
+
   class Program
     include Iterator(Set(Atom))
 
@@ -88,6 +110,7 @@ module Asp
       @solution_procedure_started = false
       @atoms = Set(Atom).new
       @rules = Set(Rule).new
+      @stack = Array(NamedTuple(ub: Set(Atom), lb: Set(Atom), a: Atom, path: Symbol, remove: Bool)).new
     end
 
     def addRule(*body, implies head)
@@ -133,12 +156,12 @@ module Asp
     end
 
     def next
-      if !@solution_procedure_started
+      if @solution_procedure_started == false
         @solution_procedure_started = true
-        Set(Atom).new
-      else
-        Stop
       end
+        
+      Stop
+      
     end
   end
 end
