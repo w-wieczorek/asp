@@ -1,5 +1,5 @@
 module Asp
-  alias Atom = UInt64
+  alias Atom = UInt32
   alias Rule = NamedTuple(head: Atom, positives: Set(Atom), negatives: Set(Atom))
 
   struct Literal
@@ -15,40 +15,32 @@ module Asp
   end
 
   EMPTY = Set(Atom).new
-  DUMMY = Literal.new(0_u64, false)
+  DUMMY = Literal.new(0_u32, false)
   
   class LiteralFactory
-    property indices : Array(UInt64)
+    @@indices = Hash({UInt64, String}, UInt32).new
+    @@num_of_atoms = 1_u32  # Dummy atom (0_u32) is the first
 
-    def initialize(range : Range(Int32, Int32))
-      @indices = range.to_a.map &.hash
-      @indices.uniq!
-      if @indices.size < range.size
-        raise RuntimeError.new("Inefficient hash function for class Int32.")
-      end
-    end
-
-    def initialize(range : Array(T)) forall T
-      @indices = range.map &.hash
-      @indices.uniq!
-      if @indices.size < range.size
-        raise RuntimeError.new("Inefficient hash function for class #{T.name}.")
-      end
-    end
-
-    def initialize(range : Set(T)) forall T
-      @indices = range.to_a.map &.hash
-      @indices.uniq!
-      if @indices.size < range.size
-        raise RuntimeError.new("Inefficient hash function for class #{T.name}.")
+    def initialize(range)
+      u = self.object_id
+      range.each do |idx|
+        @@indices[{u, idx.to_s}] = @@num_of_atoms
+        @@num_of_atoms += 1_u32
       end
     end
 
     def [](idx : Object) : Literal
-      x0 = self.object_id.to_u128
-      x1 = idx.hash.to_u128
-      v = (x0 * 4029721224409075548 + x1 * 5440965862096952843) % 18446744073709551557
-      Literal.new(v.to_u64, false)
+      u = self.object_id
+      s = idx.to_s
+      i = @@indices[{u, s}]
+      Literal.new(i, false)
+    end
+
+    def [](*ids) : Literal
+      u = self.object_id
+      s = ids.to_s
+      i = @@indices[{u, s}]
+      Literal.new(i, false)
     end
   end
 

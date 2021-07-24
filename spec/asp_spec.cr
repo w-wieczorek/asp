@@ -14,43 +14,44 @@ describe Asp do
 
   it "adds facts and constraints to a logic program" do
     prog = Asp::Program.new
-    idx_arr = (0..2).zip ["Ala", "Ewa", "Adam"]
+    idx_arr = (0..2).zip ["Ala", "Grażyna", "Adam"]
     person = Asp::LiteralFactory.new idx_arr
-    prog.addFact person[{0, "Ala"}]
-    prog.addConstraint person[{1, "Ewa"}], ~person[{2, "Adam"}]
-    prog.atoms.should eq(Set{person[{0, "Ala"}].atom, person[{1, "Ewa"}].atom, 
-      person[{2, "Adam"}].atom, Asp::DUMMY.atom})
+    prog.addFact person[0, "Ala"]
+    prog.addConstraint person[1, "Grażyna"], ~person[2, "Adam"]
+    prog.atoms.should eq(Set{person[0, "Ala"].atom, person[1, "Grażyna"].atom, 
+      person[2, "Adam"].atom, Asp::DUMMY.atom})
     prog.rules.size.should eq(2)
-    r1 = {head: person[{0, "Ala"}].atom, positives: Asp::EMPTY, 
+    r1 = {head: person[0, "Ala"].atom, positives: Asp::EMPTY, 
       negatives: Asp::EMPTY}
     prog.rules.should contain(r1)
-    r2 = {head: Asp::DUMMY.atom, positives: Set{person[{1, "Ewa"}].atom}, 
-      negatives: Set{person[{2, "Adam"}].atom, Asp::DUMMY.atom}}
+    r2 = {head: Asp::DUMMY.atom, positives: Set{person[1, "Grażyna"].atom}, 
+      negatives: Set{person[2, "Adam"].atom, Asp::DUMMY.atom}}
     prog.rules.should contain(r2)
   end
 
   it "computes reduct" do
     prog = Asp::Program.new
     idx_arr = [:a, :b]
-    idx_arr2 = idx_arr.each_repeated_combination.to_a.map{ |pair| Tuple(Symbol, Symbol).from pair }
+    idx_arr2 = [] of {Symbol, Symbol}
+    idx_arr.each_repeated_permutation { |pair| idx_arr2 << Tuple(Symbol, Symbol).from pair }
     el = Asp::LiteralFactory.new idx_arr
     equal = Asp::LiteralFactory.new idx_arr2
     neq = Asp::LiteralFactory.new idx_arr2
     idx_arr.each do |i|
       prog.addFact el[i]
-      prog.addRule el[i], implies: equal[{i, i}]
+      prog.addRule el[i], implies: equal[i, i]
       idx_arr.each do |j|
-        prog.addRule el[i], el[j], ~equal[{i, j}], implies: neq[{i, j}]
+        prog.addRule el[i], el[j], ~equal[i, j], implies: neq[i, j]
       end
     end
     expected = Set(Asp::Rule).new
     expected.add({head: el[:a].atom, positives: Asp::EMPTY, negatives: Asp::EMPTY})
     expected.add({head: el[:b].atom, positives: Asp::EMPTY, negatives: Asp::EMPTY})
-    expected.add({head: equal[{:a, :a}].atom, positives: Set{el[:a].atom}, negatives: Asp::EMPTY})
-    expected.add({head: equal[{:b, :b}].atom, positives: Set{el[:b].atom}, negatives: Asp::EMPTY})
-    expected.add({head: neq[{:a, :b}].atom, positives: Set{el[:a].atom, el[:b].atom}, negatives: Asp::EMPTY})
-    expected.add({head: neq[{:b, :a}].atom, positives: Set{el[:a].atom, el[:b].atom}, negatives: Asp::EMPTY})
-    x = Set{equal[{:a, :a}].atom, equal[{:b, :b}].atom, el[:a].atom, el[:b].atom, neq[{:a, :b}].atom, neq[{:b, :a}].atom}
+    expected.add({head: equal[:a, :a].atom, positives: Set{el[:a].atom}, negatives: Asp::EMPTY})
+    expected.add({head: equal[:b, :b].atom, positives: Set{el[:b].atom}, negatives: Asp::EMPTY})
+    expected.add({head: neq[:a, :b].atom, positives: Set{el[:a].atom, el[:b].atom}, negatives: Asp::EMPTY})
+    expected.add({head: neq[:b, :a].atom, positives: Set{el[:a].atom, el[:b].atom}, negatives: Asp::EMPTY})
+    x = Set{equal[:a, :a].atom, equal[:b, :b].atom, el[:a].atom, el[:b].atom, neq[:a, :b].atom, neq[:b, :a].atom}
     computed = Asp.reduct(prog.rules, x)
     computed.should eq(expected)
   end
