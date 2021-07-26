@@ -15,14 +15,15 @@ describe Asp do
   it "adds facts and constraints to a logic program" do
     prog = Asp::Program.new
     idx_arr = (0..2).zip ["Ala", "Grażyna", "Adam"]
+    Asp::LiteralFactory.reset
     person = Asp::LiteralFactory.new idx_arr
     prog.addFact person[0, "Ala"]
     prog.addConstraint person[1, "Grażyna"], ~person[2, "Adam"]
     prog.atoms.should eq(Set{person[0, "Ala"].atom, person[1, "Grażyna"].atom, 
       person[2, "Adam"].atom, Asp::DUMMY.atom})
     prog.rules.size.should eq(2)
-    r1 = {head: person[0, "Ala"].atom, positives: Asp::EMPTY, 
-      negatives: Asp::EMPTY}
+    r1 = {head: person[0, "Ala"].atom, positives: Set(Asp::Atom).new, 
+      negatives: Set(Asp::Atom).new}
     prog.rules.should contain(r1)
     r2 = {head: Asp::DUMMY.atom, positives: Set{person[1, "Grażyna"].atom}, 
       negatives: Set{person[2, "Adam"].atom, Asp::DUMMY.atom}}
@@ -34,6 +35,7 @@ describe Asp do
     idx_arr = [:a, :b]
     idx_arr2 = [] of {Symbol, Symbol}
     idx_arr.each_repeated_permutation { |pair| idx_arr2 << Tuple(Symbol, Symbol).from pair }
+    Asp::LiteralFactory.reset
     el = Asp::LiteralFactory.new idx_arr
     equal = Asp::LiteralFactory.new idx_arr2
     neq = Asp::LiteralFactory.new idx_arr2
@@ -45,12 +47,12 @@ describe Asp do
       end
     end
     expected = Set(Asp::Rule).new
-    expected.add({head: el[:a].atom, positives: Asp::EMPTY, negatives: Asp::EMPTY})
-    expected.add({head: el[:b].atom, positives: Asp::EMPTY, negatives: Asp::EMPTY})
-    expected.add({head: equal[:a, :a].atom, positives: Set{el[:a].atom}, negatives: Asp::EMPTY})
-    expected.add({head: equal[:b, :b].atom, positives: Set{el[:b].atom}, negatives: Asp::EMPTY})
-    expected.add({head: neq[:a, :b].atom, positives: Set{el[:a].atom, el[:b].atom}, negatives: Asp::EMPTY})
-    expected.add({head: neq[:b, :a].atom, positives: Set{el[:a].atom, el[:b].atom}, negatives: Asp::EMPTY})
+    expected.add({head: el[:a].atom, positives: Set(Asp::Atom).new, negatives: Set(Asp::Atom).new})
+    expected.add({head: el[:b].atom, positives: Set(Asp::Atom).new, negatives: Set(Asp::Atom).new})
+    expected.add({head: equal[:a, :a].atom, positives: Set{el[:a].atom}, negatives: Set(Asp::Atom).new})
+    expected.add({head: equal[:b, :b].atom, positives: Set{el[:b].atom}, negatives: Set(Asp::Atom).new})
+    expected.add({head: neq[:a, :b].atom, positives: Set{el[:a].atom, el[:b].atom}, negatives: Set(Asp::Atom).new})
+    expected.add({head: neq[:b, :a].atom, positives: Set{el[:a].atom, el[:b].atom}, negatives: Set(Asp::Atom).new})
     x = Set{equal[:a, :a].atom, equal[:b, :b].atom, el[:a].atom, el[:b].atom, neq[:a, :b].atom, neq[:b, :a].atom}
     computed = Asp.reduct(prog.rules, x)
     computed.should eq(expected)
@@ -58,6 +60,7 @@ describe Asp do
 
   it "determines the smallest model of a positive program" do
     prog = Asp::Program.new
+    Asp::LiteralFactory.reset
     q = Asp::LiteralFactory.new (1..6)
     prog.addFact q[1]
     prog.addRule q[1], implies: q[2]
@@ -70,6 +73,7 @@ describe Asp do
 
   it "computes reduct and cn on it" do
     prog = Asp::Program.new
+    Asp::LiteralFactory.reset
     q = Asp::LiteralFactory.new (1..6)
     prog.addFact q[1]
     prog.addRule ~q[1], implies: q[2]
@@ -77,7 +81,7 @@ describe Asp do
     prog.addRule ~q[3], ~q[5], implies: q[4]
     prog.addRule q[2], ~q[6], implies: q[5]
     prog.addRule q[5], implies: q[5]
-    p0 = Asp.reduct prog.rules, Asp::EMPTY
+    p0 = Asp.reduct prog.rules, Set(Asp::Atom).new
     p6 = Asp.reduct prog.rules, Set{q[1].atom, q[2].atom, q[3].atom, q[4].atom, q[5].atom, q[6].atom}
     expected0 = Set{q[1].atom, q[2].atom, q[3].atom, q[4].atom, q[5].atom}
     expected6 = Set{q[1].atom}
@@ -89,6 +93,7 @@ describe Asp do
 
   it "can narrow" do
     prog = Asp::Program.new
+    Asp::LiteralFactory.reset
     q = Asp::LiteralFactory.new (1..6)
     prog.addFact q[1]
     prog.addRule ~q[1], implies: q[2]
@@ -102,5 +107,43 @@ describe Asp do
     lb, ub = Asp.narrow(pi, lb, ub)
     lb.should eq(Set{q[1].atom})
     ub.should eq(Set{q[1].atom, q[3].atom, q[4].atom})
+  end
+
+  it "computes answer sets for simple programs" do
+    prog = Asp::Program.new
+    Asp::LiteralFactory.reset
+    a = Asp::LiteralFactory.new [0, 1]
+    prog.addRule a[0], implies: a[0]
+    prog.first?.should eq(Set(Asp::Atom).new)
+    prog = Asp::Program.new
+    prog.addRule ~a[1], implies: a[0]
+    prog.first?.should eq(Set{a[0].atom})
+    prog = Asp::Program.new
+    prog.addRule ~a[0], implies: a[0]
+    prog.first?.should be_nil
+  end
+
+  it "computes all answer sets" do
+    prog = Asp::Program.new
+    Asp::LiteralFactory.reset
+    a = Asp::LiteralFactory.new [1, 2]
+    e = Asp::LiteralFactory.new [1, 2]
+    d = Asp::LiteralFactory.new [1, 2]
+    c = Asp::LiteralFactory.new [{1, 1}, {1, 2}, {2, 1}, {2, 2}]
+    (1..2).each do |x|
+      prog.addFact d[x]
+      prog.addRule d[x], ~e[x], implies: a[x]
+      prog.addRule d[x], ~a[x], implies: e[x]
+      (1..2).each { |y| prog.addRule a[x], a[y], implies: c[x, y] }
+    end
+    expected = Set(Set(Asp::Atom)).new
+    expected.add Set{d[1].atom, d[2].atom, a[1].atom, a[2].atom, c[1, 1].atom,
+      c[2, 1].atom, c[1, 2].atom, c[2, 2].atom}
+    expected.add Set{d[1].atom, d[2].atom, a[1].atom, e[2].atom, c[1, 1].atom}
+    expected.add Set{d[1].atom, d[2].atom, e[1].atom, a[2].atom, c[2, 2].atom}
+    expected.add Set{d[1].atom, d[2].atom, e[1].atom, e[2].atom}
+    computed = Set(Set(Asp::Atom)).new
+    prog.each { |answer| computed.add answer }
+    computed.should eq(expected)
   end
 end

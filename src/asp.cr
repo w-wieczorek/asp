@@ -14,7 +14,6 @@ module Asp
     end
   end
 
-  EMPTY = Set(Atom).new
   DUMMY = Literal.new(0_u32, false)
   
   class LiteralFactory
@@ -42,13 +41,18 @@ module Asp
       i = @@indices[{u, s}]
       Literal.new(i, false)
     end
+
+    def self.reset
+      @@indices.clear
+      @@num_of_atoms = 1_u32
+    end
   end
 
   def self.reduct(pi : Set(Rule), x : Set(Atom)) : Set(Rule)
     result = Set(Rule).new
     pi.each do |r|
       unless x.intersects? r[:negatives] 
-        result.add({head: r[:head], positives: r[:positives], negatives: EMPTY})
+        result.add({head: r[:head], positives: r[:positives], negatives: Set(Atom).new})
       end
     end
     result
@@ -103,13 +107,11 @@ module Asp
       @atoms = Set(Atom).new
       @rules = Set(Rule).new
       @stack = Array(Tuple(Set(Atom), Set(Atom), Atom, Symbol, Bool)).new
-      LiteralFactory::indices.clear
-      LiteralFactory::num_of_atoms = 1_u32
     end
 
     def addRule(*body, implies head)
-      raise ArgumentError.new("The head cannot be negated!") if head.negated
-      raise RuntimeError.new("Cannot change model during solving!") if @solution_procedure_started
+      raise "The head cannot be negated!" if head.negated
+      raise "Cannot change model during solving!" if @solution_procedure_started
       pos_set = Set(Atom).new
       neg_set = Set(Atom).new
       body.each do |literal|
@@ -126,14 +128,14 @@ module Asp
     end
 
     def addFact(head)
-      raise ArgumentError.new("The head cannot be negated!") if head.negated
-      raise RuntimeError.new("Cannot change model during solving!") if @solution_procedure_started
-      @rules.add({head: head.atom, positives: EMPTY, negatives: EMPTY})
+      raise "The head cannot be negated!" if head.negated
+      raise "Cannot change model during solving!" if @solution_procedure_started
+      @rules.add({head: head.atom, positives: Set(Atom).new, negatives: Set(Atom).new})
       @atoms.add(head.atom)
     end
 
     def addConstraint(*body)
-      raise RuntimeError.new("Cannot change model during solving!") if @solution_procedure_started
+      raise "Cannot change model during solving!" if @solution_procedure_started
       pos_set = Set(Atom).new
       neg_set = Set(Atom).new
       body.each do |literal|
@@ -152,18 +154,20 @@ module Asp
     def next
       if @solution_procedure_started == false
         @solution_procedure_started = true
-        lb, ub = narrow @rules, Set(Atom).new, @atoms
+        lb, ub = Asp.narrow(@rules, Set(Atom).new, @atoms)
         if lb == ub
           return lb
-        elseif lb.subset_of?(ub)
-          a = (ub - lb).sample
-          @stack.push {lb, ub, a, [:expand, :cut_down].sample, false}
+        else
+          if lb.subset_of?(ub)
+            a = (ub - lb).sample
+            @stack.push({lb, ub, a, [:expand, :cut_down].sample, false})
+          end
         end
       end
       until @stack.empty?
         lb, ub, a, path, remove = @stack.pop
         unless remove
-          @stack.push {lb, ub, a, path == :expand ? :cut_down : :expand, true}
+          @stack.push({lb.dup, ub.dup, a, path == :expand ? :cut_down : :expand, true})
         end
         case path
         when :expand
@@ -171,16 +175,18 @@ module Asp
         when :cut_down
           ub.delete a
         end 
-        lb, ub = narrow @rules, lb, ub
+        lb, ub = Asp.narrow(@rules, lb, ub)
         if lb == ub
           return lb
-        elseif lb.subset_of?(ub)
-          a = (ub - lb).sample
-          @stack.push {lb, ub, a, [:expand, :cut_down].sample, false}
+        else
+          if lb.subset_of?(ub)
+            a = (ub - lb).sample
+            @stack.push({lb, ub, a, [:expand, :cut_down].sample, false})
+          end
         end
       end
       @solution_procedure_started = false
-      Stop
+      stop
     end
   end
 end
