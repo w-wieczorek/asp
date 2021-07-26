@@ -102,7 +102,9 @@ module Asp
       @solution_procedure_started = false
       @atoms = Set(Atom).new
       @rules = Set(Rule).new
-      @stack = Array(NamedTuple(ub: Set(Atom), lb: Set(Atom), a: Atom, path: Symbol, remove: Bool)).new
+      @stack = Array(Tuple(Set(Atom), Set(Atom), Atom, Symbol, Bool)).new
+      LiteralFactory::indices.clear
+      LiteralFactory::num_of_atoms = 1_u32
     end
 
     def addRule(*body, implies head)
@@ -150,10 +152,35 @@ module Asp
     def next
       if @solution_procedure_started == false
         @solution_procedure_started = true
+        lb, ub = narrow @rules, Set(Atom).new, @atoms
+        if lb == ub
+          return lb
+        elseif lb.subset_of?(ub)
+          a = (ub - lb).sample
+          @stack.push {lb, ub, a, [:expand, :cut_down].sample, false}
+        end
       end
-        
+      until @stack.empty?
+        lb, ub, a, path, remove = @stack.pop
+        unless remove
+          @stack.push {lb, ub, a, path == :expand ? :cut_down : :expand, true}
+        end
+        case path
+        when :expand
+          lb.add a
+        when :cut_down
+          ub.delete a
+        end 
+        lb, ub = narrow @rules, lb, ub
+        if lb == ub
+          return lb
+        elseif lb.subset_of?(ub)
+          a = (ub - lb).sample
+          @stack.push {lb, ub, a, [:expand, :cut_down].sample, false}
+        end
+      end
+      @solution_procedure_started = false
       Stop
-      
     end
   end
 end
