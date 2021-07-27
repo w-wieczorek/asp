@@ -121,6 +121,16 @@ describe Asp do
     prog = Asp::Program.new
     prog.addRule ~a[0], implies: a[0]
     prog.first?.should be_nil
+    prog = Asp::Program.new
+    prog.addRule ~a[1], implies: a[0]
+    prog.addRule ~a[0], implies: a[1]
+    result = Set(Set(Asp::Atom)).new
+    prog.each { |answer| result << answer }
+    result.should eq(Set{Set{a[0].atom}, Set{a[1].atom}})
+    prog.addRule ~a[0], implies: a[0]
+    result.clear
+    prog.each { |answer| result << answer }
+    result.should eq(Set{Set{a[0].atom}})
   end
 
   it "computes all answer sets" do
@@ -145,5 +155,69 @@ describe Asp do
     computed = Set(Set(Asp::Atom)).new
     prog.each { |answer| computed.add answer }
     computed.should eq(expected)
+  end
+
+  it "solves a combinatorial problem (Hamiltonian Cycle)" do
+    prog = Asp::Program.new
+    Asp::LiteralFactory.reset
+    graph = { vertices: {0, 1, 2}, edges: { {0, 1}, {1, 0}, {1, 2}, {2, 0} } }
+    taken = Asp::LiteralFactory.new graph[:edges]
+    not_taken = Asp::LiteralFactory.new graph[:edges]
+    reachable = Asp::LiteralFactory.new graph[:vertices]
+    graph[:edges].each do |u, v|
+      prog.addRule ~not_taken[u, v], implies: taken[u, v]
+      prog.addRule ~taken[u, v], implies: not_taken[u, v]
+    end
+    graph[:vertices].each do |v|
+      prog.addRule taken[0, v], implies: reachable[v] if graph[:edges].includes?({0, v})
+      graph[:vertices].each do |u| 
+        prog.addRule reachable[u], taken[u, v], implies: reachable[v] if graph[:edges].includes?({u, v})
+      end
+      prog.addConstraint ~reachable[v]
+    end
+    graph[:edges].each do |u1, v1|
+      graph[:edges].each do |u2, v2|
+        if (v1 == v2 && u1 != u2) || (u1 == u2 && v1 != v2)
+          prog.addConstraint taken[u1, v1], taken[u2, v2]
+        end
+      end
+    end
+    result = prog.first?
+    result.should be_truthy
+    result.as(Set(Asp::Atom)).should contain(taken[0, 1].atom)
+    result.as(Set(Asp::Atom)).should contain(taken[1, 2].atom)
+    result.as(Set(Asp::Atom)).should contain(taken[2, 0].atom)
+    result.as(Set(Asp::Atom)).should contain(not_taken[1, 0].atom)
+  end
+
+  it "solves a combinatorial problem (Graph Coloring)" do
+    prog = Asp::Program.new
+    Asp::LiteralFactory.reset
+    graph = { vertices: {0, 1, 2, 3, 4}, edges: { {0, 1}, {0, 3}, {0, 4}, {1, 2}, {2, 3}, {3, 4} } }
+    cs = [:red, :green, :blue]
+    pairs = [] of {Int32, Symbol}
+    graph[:vertices].each { |v| cs.each { |c| pairs << {v, c} } }
+    color = Asp::LiteralFactory.new pairs
+    other_color = Asp::LiteralFactory.new pairs
+    has_color = Asp::LiteralFactory.new graph[:vertices]
+    graph[:vertices].each do |v|
+      cs.each do |c| 
+        prog.addRule ~other_color[v, c], implies: color[v, c] 
+        prog.addRule ~color[v, c], implies: other_color[v, c] 
+        prog.addRule color[v, c], implies: has_color[v]
+        cs.each { |c2| prog.addConstraint color[v, c], color[v, c2] unless c == c2 }
+      end
+      prog.addConstraint ~has_color[v]
+    end
+    graph[:edges].each do |v, u|
+      cs.each { |c| prog.addConstraint color[v, c], color[u, c] }
+    end
+    prog.addFact color[0, :red]
+    prog.addFact color[1, :blue]
+    prog.addFact color[3, :green]
+    result = prog.first?
+    result.should be_truthy
+    result.as(Set(Asp::Atom)).should contain(color[2, :red].atom)
+    result.as(Set(Asp::Atom)).should contain(color[4, :blue].atom)
   end
 end

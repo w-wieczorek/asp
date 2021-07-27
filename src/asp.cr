@@ -46,6 +46,10 @@ module Asp
       @@indices.clear
       @@num_of_atoms = 1_u32
     end
+
+    def self.indices
+      @@indices
+    end
   end
 
   def self.reduct(pi : Set(Rule), x : Set(Atom)) : Set(Rule)
