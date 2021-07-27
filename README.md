@@ -31,18 +31,17 @@ require "asp"
 include Asp
 
 prog = Program.new
-graph = { vertices: {0, 1, 2, 3, 4, 5, 6, 7}, 
-  edges: { {0, 1}, {0, 2}, {1, 2}, {2, 6}, {3, 1}, {3, 2}, {4, 0}, {4, 5} } }
+graph = { vertices: (0..7).to_set,
+  edges: Set{ {0, 1}, {0, 2}, {1, 2}, {2, 6}, {3, 1}, {3, 2}, {4, 0}, {4, 5} } }
 taken = LiteralFactory.new graph[:vertices]
 not_taken = LiteralFactory.new graph[:vertices]
-outdegree = {} of Int32 => Int32
 graph[:vertices].each do |v|
   prog.addRule ~not_taken[v], implies: taken[v]
   prog.addRule ~taken[v], implies: not_taken[v]
-  outdegree[v] = 0
-  graph[:edges].each { |u, w| outdegree[v] += 1 if v == u }
-  prog.addFact taken[v] if outdegree[v] == 0
-  if outdegree[v] > 0
+  outdegree = 0
+  graph[:edges].each { |u, w| outdegree += 1 if v == u }
+  prog.addFact taken[v] if outdegree == 0
+  if outdegree > 0
     arr = [~taken[v]]
     graph[:edges].each { |u, w| arr << ~taken[w] if v == u }
     prog.addConstraintFromArray arr
@@ -51,10 +50,10 @@ end
 graph[:edges].each do |u, v|
   prog.addConstraint taken[u], taken[v]
 end
-result = prog.first?
-if result
+answer = prog.first?
+if answer
   print "Kernel:"
-  graph[:vertices].each { |v| print " #{v}" if result.includes? taken[v].atom }
+  graph[:vertices].each { |v| print " #{v}" if answer.includes? taken[v].atom }
   puts
 else
   puts "There is no kernel."
