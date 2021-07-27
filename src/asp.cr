@@ -113,7 +113,7 @@ module Asp
       @stack = Array(Tuple(Set(Atom), Set(Atom), Atom, Symbol, Bool)).new
     end
 
-    def addRule(*body, implies head)
+    private def _addRule(body, head)
       raise "The head cannot be negated!" if head.negated
       raise "Cannot change model during solving!" if @solution_procedure_started
       pos_set = Set(Atom).new
@@ -131,6 +131,14 @@ module Asp
       @atoms.concat(neg_set)
     end
 
+    def addRule(*body, implies head)
+      _addRule(body, head)
+    end
+
+    def addRuleFromArray(body, implies head)
+      _addRule(body, head)
+    end
+
     def addFact(head)
       raise "The head cannot be negated!" if head.negated
       raise "Cannot change model during solving!" if @solution_procedure_started
@@ -138,7 +146,7 @@ module Asp
       @atoms.add(head.atom)
     end
 
-    def addConstraint(*body)
+    private def _addConstraint(body)
       raise "Cannot change model during solving!" if @solution_procedure_started
       pos_set = Set(Atom).new
       neg_set = Set(Atom).new
@@ -153,6 +161,14 @@ module Asp
       @rules.add({head: DUMMY.atom, positives: pos_set, negatives: neg_set})
       @atoms.concat(pos_set)
       @atoms.concat(neg_set)
+    end
+
+    def addConstraint(*body)
+      _addConstraint(body)
+    end
+
+    def addConstraintFromArray(body)
+      _addConstraint(body)
     end
 
     def next

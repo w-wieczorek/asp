@@ -220,4 +220,39 @@ describe Asp do
     result.as(Set(Asp::Atom)).should contain(color[2, :red].atom)
     result.as(Set(Asp::Atom)).should contain(color[4, :blue].atom)
   end
+
+  it "solves a combinatorial problem (Kernel)" do
+    prog = Asp::Program.new
+    Asp::LiteralFactory.reset
+    graph = { vertices: {0, 1, 2, 3, 4, 5, 6, 7}, 
+      edges: { {0, 1}, {0, 2}, {1, 2}, {2, 6}, {3, 1}, {3, 2}, {4, 0}, {4, 5} } }
+    taken = Asp::LiteralFactory.new graph[:vertices]
+    not_taken = Asp::LiteralFactory.new graph[:vertices]
+    outdegree = {} of Int32 => Int32
+    graph[:vertices].each do |v|
+      prog.addRule ~not_taken[v], implies: taken[v]
+      prog.addRule ~taken[v], implies: not_taken[v]
+      outdegree[v] = 0
+      graph[:edges].each { |u, w| outdegree[v] += 1 if v == u }
+      prog.addFact taken[v] if outdegree[v] == 0
+      if outdegree[v] > 0
+        arr = [~taken[v]]
+        graph[:edges].each { |u, w| arr << ~taken[w] if v == u }
+        prog.addConstraintFromArray arr
+      end
+    end
+    graph[:edges].each do |u, v|
+      prog.addConstraint taken[u], taken[v]
+    end
+    result = prog.first?
+    result.should be_truthy
+    result.as(Set(Asp::Atom)).should contain(taken[1].atom)
+    result.as(Set(Asp::Atom)).should contain(taken[5].atom)
+    result.as(Set(Asp::Atom)).should contain(taken[6].atom)
+    result.as(Set(Asp::Atom)).should contain(taken[7].atom)
+    result.as(Set(Asp::Atom)).should contain(not_taken[0].atom)
+    result.as(Set(Asp::Atom)).should contain(not_taken[2].atom)
+    result.as(Set(Asp::Atom)).should contain(not_taken[3].atom)
+    result.as(Set(Asp::Atom)).should contain(not_taken[4].atom)
+  end
 end

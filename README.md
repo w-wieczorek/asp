@@ -1,6 +1,6 @@
 # asp
 
-This [Crystal](https://crystal-lang.org/) module consists of the set of classes to modeling optimization problems by means of [Answer Set Programming](https://en.wikipedia.org/wiki/Answer_set_programming).
+This [Crystal](https://crystal-lang.org/) module consists of the set of classes to modeling optimization problems by means of [Answer Set Programming](https://en.wikipedia.org/wiki/Answer_set_programming). We use only grounded rules. This is a development version: in a near future it will be extended by optimization tools. For definitions and basic algorithms please refer to an [article](https://www.mdpi.com/2076-3417/10/21/7700).
 
 ## Installation
 
@@ -9,7 +9,8 @@ This [Crystal](https://crystal-lang.org/) module consists of the set of classes 
    ```yaml
    dependencies:
      asp:
-       github: your-github-user/asp
+       github: w-wieczorek/asp
+       version: 0.1.0
    ```
 
 2. Run `shards install`
@@ -20,11 +21,47 @@ This [Crystal](https://crystal-lang.org/) module consists of the set of classes 
 require "asp"
 ```
 
-TODO: Write usage instructions here
+Let us solve as an example the graph kernel problem. For a given directed graph
+G = (V, E), find an [independent set](https://en.wikipedia.org/wiki/Independent_set_(graph_theory))
+of vertices, U, such that if v is in V - U then there is at least one u in U for which (v, u) is
+in E.
 
-## Development
+```crystal
+require "asp"
+include Asp
 
-TODO: Write development instructions here
+prog = Program.new
+graph = { vertices: {0, 1, 2, 3, 4, 5, 6, 7}, 
+  edges: { {0, 1}, {0, 2}, {1, 2}, {2, 6}, {3, 1}, {3, 2}, {4, 0}, {4, 5} } }
+taken = LiteralFactory.new graph[:vertices]
+not_taken = LiteralFactory.new graph[:vertices]
+outdegree = {} of Int32 => Int32
+graph[:vertices].each do |v|
+  prog.addRule ~not_taken[v], implies: taken[v]
+  prog.addRule ~taken[v], implies: not_taken[v]
+  outdegree[v] = 0
+  graph[:edges].each { |u, w| outdegree[v] += 1 if v == u }
+  prog.addFact taken[v] if outdegree[v] == 0
+  if outdegree[v] > 0
+    arr = [~taken[v]]
+    graph[:edges].each { |u, w| arr << ~taken[w] if v == u }
+    prog.addConstraintFromArray arr
+  end
+end
+graph[:edges].each do |u, v|
+  prog.addConstraint taken[u], taken[v]
+end
+result = prog.first?
+if result
+  print "Kernel:"
+  graph[:vertices].each { |v| print " v" if result.includes? taken[v].atom }
+  puts
+else
+  puts "There is no kernel."
+end
+```
+
+For more examples please see `spec` directory.
 
 ## Contributing
 
