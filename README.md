@@ -54,7 +54,7 @@ end
 result = prog.first?
 if result
   print "Kernel:"
-  graph[:vertices].each { |v| print " v" if result.includes? taken[v].atom }
+  graph[:vertices].each { |v| print " #{v}" if result.includes? taken[v].atom }
   puts
 else
   puts "There is no kernel."
