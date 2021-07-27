@@ -10,7 +10,7 @@ This [Crystal](https://crystal-lang.org/) module consists of the set of classes 
    dependencies:
      asp:
        github: w-wieczorek/asp
-       version: 0.1.0
+       branch: master
    ```
 
 2. Run `shards install`
