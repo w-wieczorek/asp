@@ -2,6 +2,18 @@ require "spec"
 require "../src/asp.cr"
 
 describe Asp do
+  it "includes a class for priority queue" do
+    q = Asp::Heap(Tuple(String, Int32)).new
+    q.insert({"Ala", 7})
+    q.empty?.should be_false
+    q.insert({"Grażyna", 3})
+    q.insert({"Ewa", 10})
+    q.extract.should eq({"Grażyna", 3})
+    q.extract.should eq({"Ala", 7})
+    q.extract.should eq({"Ewa", 10})
+    q.empty?.should be_true
+  end
+
   it "creates a rule and adds it to a logic program" do
     prog = Asp::Program.new
     p = Asp::LiteralFactory.new (0..3)

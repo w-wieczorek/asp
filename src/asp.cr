@@ -100,6 +100,63 @@ module Asp
     {lb, ub}
   end
 
+  class Heap(T)
+    # T is a tuple with the last element being priority
+    
+    def initialize
+      @arr = Array(T).new(1024)
+      @heap_size = 0
+    end
+
+    private def parent(i)
+      i//2
+    end
+
+    private def left(i)
+      2*i
+    end
+
+    private def right(i)
+      2*i + 1
+    end
+
+    private def heapify(i)
+      l = left(i)
+      r = right(i)
+      smallest = l <= @heap_size && @arr[l][-1] < @arr[i][-1] ? l : i
+      smallest = r if r <= @heap_size && @arr[r][-1] < @arr[smallest][-1]
+      if smallest != i
+        @arr.swap(i, smallest)
+        heapify(smallest)
+      end
+    end
+
+    def extract : T
+      m = @arr[0]
+      @arr[0] = @arr[@heap_size - 1]
+      @heap_size -= 1
+      heapify 0
+      m
+    end
+
+    def insert(el : T)
+      @heap_size += 1
+      if @arr.size < @heap_size
+        @arr << el
+      end
+      i = @heap_size - 1
+      while i > 0 && @arr[parent(i)][-1] > el[-1]
+        @arr[i] = @arr[parent(i)]
+        i = parent(i)
+      end
+      @arr[i] = el
+    end
+
+    def empty?
+      @heap_size == 0
+    end
+  end
+
   class Program
     include Iterator(Set(Atom))
 
@@ -110,7 +167,7 @@ module Asp
       @solution_procedure_started = false
       @atoms = Set(Atom).new
       @rules = Set(Rule).new
-      @stack = Array(Tuple(Set(Atom), Set(Atom), Atom, Symbol, Bool)).new
+      @heap = Heap(Tuple(Set(Atom), Set(Atom), Atom, Symbol, Int32)).new
     end
 
     private def _addRule(body, head)
@@ -180,15 +237,13 @@ module Asp
         else
           if lb.subset_of?(ub)
             a = (ub - lb).sample
-            @stack.push({lb, ub, a, [:expand, :cut_down].sample, false})
+            @heap.insert({lb.dup, ub.dup, a, :cut_down, ub.size - lb.size})
+            @heap.insert({lb.dup, ub.dup, a, :expand, ub.size - lb.size})
           end
         end
       end
-      until @stack.empty?
-        lb, ub, a, path, remove = @stack.pop
-        unless remove
-          @stack.push({lb.dup, ub.dup, a, path == :expand ? :cut_down : :expand, true})
-        end
+      until @heap.empty?
+        lb, ub, a, path, priority = @heap.extract
         case path
         when :expand
           lb.add a
@@ -201,7 +256,8 @@ module Asp
         else
           if lb.subset_of?(ub)
             a = (ub - lb).sample
-            @stack.push({lb, ub, a, [:expand, :cut_down].sample, false})
+            @heap.insert({lb.dup, ub.dup, a, :cut_down, ub.size - lb.size})
+            @heap.insert({lb.dup, ub.dup, a, :expand, ub.size - lb.size})
           end
         end
       end
