@@ -238,7 +238,7 @@ module Asp
           if lb.subset_of?(ub)
             a = (ub - lb).sample
             @heap.insert({lb.dup, ub.dup, a, :cut_down, ub.size - lb.size})
-            @heap.insert({lb.dup, ub.dup, a, :expand, ub.size - lb.size})
+            @heap.insert({lb, ub, a, :expand, ub.size - lb.size})
           end
         end
       end
@@ -257,7 +257,7 @@ module Asp
           if lb.subset_of?(ub)
             a = (ub - lb).sample
             @heap.insert({lb.dup, ub.dup, a, :cut_down, ub.size - lb.size})
-            @heap.insert({lb.dup, ub.dup, a, :expand, ub.size - lb.size})
+            @heap.insert({lb, ub, a, :expand, ub.size - lb.size})
           end
         end
       end
