@@ -1,9 +1,9 @@
 name: asp
-version: 0.1.0
+version: 0.1.1
 
 authors:
   - Wojciech Wieczorek <wwieczorek@ath.bielsko.pl>
 
-crystal: 1.1.0
+crystal: 1.1.1
 
 license: MIT

@@ -267,4 +267,16 @@ describe Asp do
     result.as(Set(Asp::Atom)).should contain(not_taken[3].atom)
     result.as(Set(Asp::Atom)).should contain(not_taken[4].atom)
   end
+
+  it "determines levels of atoms" do
+    prog = Asp::Program.new
+    Asp::LiteralFactory.reset
+    a = Asp::LiteralFactory.new (1..4)
+    prog.addRule ~a[2], implies: a[1]
+    prog.addRule ~a[1], implies: a[2]
+    prog.addRule ~a[4], a[1], implies: a[3]
+    prog.addRule ~a[3], a[2], implies: a[4]
+    prog.determineLevels
+    prog.level.should eq({a[1].atom => 0, a[2].atom => 0, a[3].atom => 1, a[4].atom => 1})
+  end
 end

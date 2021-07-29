@@ -160,14 +160,84 @@ module Asp
   class Program
     include Iterator(Set(Atom))
 
-    getter atoms
-    getter rules
+    getter atoms, rules, dependences, level
 
     def initialize
       @solution_procedure_started = false
       @atoms = Set(Atom).new
       @rules = Set(Rule).new
       @heap = Heap(Tuple(Set(Atom), Set(Atom), Atom, Symbol, Int32)).new
+      @dependences = Set({Atom, Atom}).new
+      @level = {} of Atom => Int32
+    end
+
+    def determineDependences
+      @atoms.each { |a| @dependences.add({a, a}) }
+      @rules.each do |r|
+        r[:positives].each { |b| @dependences.add({r[:head], b}) }
+        r[:negatives].each { |b| @dependences.add({r[:head], b}) }
+      end
+      finish_loop = false
+      new_pairs = [] of {Atom, Atom}
+      until finish_loop
+        finish_loop = true
+        @atoms.each do |a|
+          @dependences.each do |c, b|
+            if @dependences.includes?({a, c}) && !@dependences.includes?({a, b})
+              new_pairs << {a, b}
+              finish_loop = false
+            end 
+          end
+        end
+        @dependences.concat new_pairs unless finish_loop
+        new_pairs.clear
+      end
+    end
+
+    def determineLevels
+      @dependences.clear
+      @level.clear
+      determineDependences
+      partition = [] of Set(Atom)
+      eq_class = {} of Atom => Set(Atom)
+      @atoms.each { |a| eq_class[a] = Set{a} }
+      @dependences.each do |a, b|
+        if a != b && @dependences.includes?({b, a}) && !eq_class[a].same?(eq_class[b])
+          eq_class[a].concat eq_class[b]
+          eq_class[b] = eq_class[a]
+        end
+      end
+      partition = eq_class.values.uniq
+      less_than = Set({Set(Atom), Set(Atom)}).new
+      n = partition.size
+      (0...n).each do |i|
+        (0...n).each do |j|
+          if i != j
+            partition[i].each do |p|
+              partition[j].each do |q|
+                less_than.add({partition[i], partition[j]}) if @dependences.includes?({q, p})
+              end
+            end
+          end
+        end
+      end
+      level_of_eq_class = {} of Set(Atom) => Int32
+      (0...n).each { |i| level_of_eq_class[partition[i]] = 0 }
+      current_level = 0
+      until (n = partition.size) == 0
+        (0...n).each do |i|
+          (0...n).each do |j|
+            if i != j && less_than.includes?({partition[i], partition[j]})
+              level_of_eq_class[partition[j]] = current_level + 1
+            end
+          end
+        end
+        partition.reject! { |eqc| level_of_eq_class[eqc] == current_level }
+        current_level += 1
+      end
+      level_of_eq_class.each do |eqc, lev|
+        eqc.each { |a| @level[a] = lev }
+      end
     end
 
     private def _addRule(body, head)
@@ -228,15 +298,20 @@ module Asp
       _addConstraint(body)
     end
 
+    private def heuristicSelection(soa : Set(Atom))
+      soa.min_by { |a| @level[a] }
+    end
+
     def next
       if @solution_procedure_started == false
         @solution_procedure_started = true
+        determineLevels
         lb, ub = Asp.narrow(@rules, Set(Atom).new, @atoms)
         if lb == ub
           return lb
         else
           if lb.subset_of?(ub)
-            a = (ub - lb).sample
+            a = heuristicSelection(ub - lb)
             @heap.insert({lb.dup, ub.dup, a, :cut_down, ub.size - lb.size})
             @heap.insert({lb, ub, a, :expand, ub.size - lb.size})
           end
@@ -255,7 +330,7 @@ module Asp
           return lb
         else
           if lb.subset_of?(ub)
-            a = (ub - lb).sample
+            a = heuristicSelection(ub - lb)
             @heap.insert({lb.dup, ub.dup, a, :cut_down, ub.size - lb.size})
             @heap.insert({lb, ub, a, :expand, ub.size - lb.size})
           end
