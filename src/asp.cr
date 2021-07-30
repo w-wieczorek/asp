@@ -166,43 +166,43 @@ module Asp
       @solution_procedure_started = false
       @atoms = Set(Atom).new
       @rules = Set(Rule).new
-      @heap = Heap(Tuple(Set(Atom), Set(Atom), Atom, Symbol, Int32)).new
-      @dependences = Set({Atom, Atom}).new
+      @heap = Heap(Tuple(Set(Atom), Set(Atom), Int32)).new
       @level = {} of Atom => Int32
     end
 
     def determineDependences
-      @atoms.each { |a| @dependences.add({a, a}) }
+      dependences = Set({Atom, Atom}).new
+      @atoms.each { |a| dependences.add({a, a}) }
       @rules.each do |r|
-        r[:positives].each { |b| @dependences.add({r[:head], b}) }
-        r[:negatives].each { |b| @dependences.add({r[:head], b}) }
+        r[:positives].each { |b| dependences.add({r[:head], b}) }
+        r[:negatives].each { |b| dependences.add({r[:head], b}) }
       end
       finish_loop = false
       new_pairs = [] of {Atom, Atom}
       until finish_loop
         finish_loop = true
         @atoms.each do |a|
-          @dependences.each do |c, b|
-            if @dependences.includes?({a, c}) && !@dependences.includes?({a, b})
+          dependences.each do |c, b|
+            if dependences.includes?({a, c}) && !dependences.includes?({a, b})
               new_pairs << {a, b}
               finish_loop = false
             end 
           end
         end
-        @dependences.concat new_pairs unless finish_loop
+        dependences.concat new_pairs unless finish_loop
         new_pairs.clear
       end
+      dependences
     end
 
     def determineLevels
-      @dependences.clear
       @level.clear
-      determineDependences
+      dependences = determineDependences
       partition = [] of Set(Atom)
       eq_class = {} of Atom => Set(Atom)
       @atoms.each { |a| eq_class[a] = Set{a} }
-      @dependences.each do |a, b|
-        if a != b && @dependences.includes?({b, a}) && !eq_class[a].same?(eq_class[b])
+      dependences.each do |a, b|
+        if a != b && dependences.includes?({b, a}) && !eq_class[a].same?(eq_class[b])
           eq_class[a].concat eq_class[b]
           eq_class[b] = eq_class[a]
         end
@@ -215,7 +215,7 @@ module Asp
           if i != j
             partition[i].each do |p|
               partition[j].each do |q|
-                less_than.add({partition[i], partition[j]}) if @dependences.includes?({q, p})
+                less_than.add({partition[i], partition[j]}) if dependences.includes?({q, p})
               end
             end
           end
@@ -306,33 +306,18 @@ module Asp
       if @solution_procedure_started == false
         @solution_procedure_started = true
         determineLevels
-        lb, ub = Asp.narrow(@rules, Set(Atom).new, @atoms)
-        if lb == ub
-          return lb
-        else
-          if lb.subset_of?(ub)
-            a = heuristicSelection(ub - lb)
-            @heap.insert({lb.dup, ub.dup, a, :cut_down, ub.size - lb.size})
-            @heap.insert({lb, ub, a, :expand, ub.size - lb.size})
-          end
-        end
+        @heap.insert({Set(Atom).new, @atoms, @atoms.size})
       end
       until @heap.empty?
-        lb, ub, a, path, priority = @heap.extract
-        case path
-        when :expand
-          lb.add a
-        when :cut_down
-          ub.delete a
-        end 
+        lb, ub, priority = @heap.extract
         lb, ub = Asp.narrow(@rules, lb, ub)
         if lb == ub
           return lb
         else
           if lb.subset_of?(ub)
             a = heuristicSelection(ub - lb)
-            @heap.insert({lb.dup, ub.dup, a, :cut_down, ub.size - lb.size})
-            @heap.insert({lb, ub, a, :expand, ub.size - lb.size})
+            @heap.insert({lb, ub - Set{a}, ub.size - lb.size - 1})
+            @heap.insert({lb | Set{a}, ub, ub.size - lb.size - 1})
           end
         end
       end
