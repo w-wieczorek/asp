@@ -152,6 +152,10 @@ module Asp
       @arr[i] = el
     end
 
+    def clear
+      @heap_size = 0
+    end
+
     def empty?
       @heap_size == 0
     end
@@ -160,14 +164,16 @@ module Asp
   class Program
     include Iterator(Set(Atom))
 
-    getter atoms, rules, dependences, level
+    getter atoms, rules, level
 
     def initialize
       @solution_procedure_started = false
       @atoms = Set(Atom).new
       @rules = Set(Rule).new
-      @heap = Heap(Tuple(Set(Atom), Set(Atom), Int32)).new
+      @heap = Heap(Tuple(Set(Atom), Set(Atom), Int64)).new
       @level = {} of Atom => Int32
+      proc = ->(hash : Hash(Atom, Int64), key : Atom) { hash[key] = 0_i64 }
+      @weight = Hash(Atom, Int64).new(proc)
     end
 
     def determineDependences
@@ -240,6 +246,12 @@ module Asp
       end
     end
 
+    def associateWeight(w : Int64, with atom)
+      raise "Cannot change model during solving!" if @solution_procedure_started
+      raise "Weight cannot be negative!" if w < 0_i64
+      @weight[atom] = w
+    end
+
     private def _addRule(body, head)
       raise "The head cannot be negated!" if head.negated
       raise "Cannot change model during solving!" if @solution_procedure_started
@@ -306,7 +318,8 @@ module Asp
       if @solution_procedure_started == false
         @solution_procedure_started = true
         determineLevels
-        @heap.insert({Set(Atom).new, @atoms, @atoms.size})
+        @heap.clear
+        @heap.insert({Set(Atom).new, @atoms, @atoms.size.to_i64})
       end
       until @heap.empty?
         lb, ub, priority = @heap.extract
@@ -316,13 +329,75 @@ module Asp
         else
           if lb.subset_of?(ub)
             a = heuristicSelection(ub - lb)
-            @heap.insert({lb, ub - Set{a}, ub.size - lb.size - 1})
-            @heap.insert({lb | Set{a}, ub, ub.size - lb.size - 1})
+            @heap.insert({lb, ub - Set{a}, (ub.size - lb.size - 1).to_i64})
+            @heap.insert({lb | Set{a}, ub, (ub.size - lb.size - 1).to_i64})
           end
         end
       end
       @solution_procedure_started = false
       stop
+    end
+
+    private def eval(soa : Set(Atom)) : Int64
+      soa.sum(0_i64) { |a| @weight[a] }
+    end
+
+    def minimize
+      @solution_procedure_started = true
+      determineLevels
+      best_weight = Int64::MAX
+      best_answer : Set(Atom)? = nil
+      @heap.clear
+      @heap.insert({Set(Atom).new, @atoms, 0_i64})
+      until @heap.empty?
+        lb, ub, lb_eval = @heap.extract
+        next if lb_eval >= best_weight
+        lb, ub = Asp.narrow(@rules, lb, ub)
+        if lb == ub
+          if (lb_eval = eval(lb)) < best_weight
+            best_answer = lb
+            best_weight = lb_eval
+          end
+        else
+          if lb.subset_of?(ub)
+            a = heuristicSelection(ub - lb)
+            lb_eval = eval(lb)
+            @heap.insert({lb, ub - Set{a}, lb_eval})
+            @heap.insert({lb | Set{a}, ub, lb_eval + @weight[a]})
+          end
+        end
+      end
+      @solution_procedure_started = false
+      {best_answer, best_weight}
+    end
+
+    def maximize
+      @solution_procedure_started = true
+      determineLevels
+      best_weight = Int64::MIN
+      best_answer : Set(Atom)? = nil
+      @heap.clear
+      @heap.insert({Set(Atom).new, @atoms, 0_i64})
+      until @heap.empty?
+        lb, ub, ub_eval = @heap.extract
+        next if -ub_eval <= best_weight
+        lb, ub = Asp.narrow(@rules, lb, ub)
+        if lb == ub
+          if (ub_eval = eval(ub)) > best_weight
+            best_answer = ub
+            best_weight = ub_eval
+          end
+        else
+          if lb.subset_of?(ub)
+            a = heuristicSelection(ub - lb)
+            ub_eval = eval(ub)
+            @heap.insert({lb, ub - Set{a}, -ub_eval})
+            @heap.insert({lb | Set{a}, ub, -ub_eval - @weight[a]})
+          end
+        end
+      end
+      @solution_procedure_started = false
+      {best_answer, best_weight}
     end
   end
 end

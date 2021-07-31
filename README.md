@@ -1,6 +1,10 @@
 # asp
 
-This [Crystal](https://crystal-lang.org/) module consists of the set of classes to modeling optimization problems by means of [Answer Set Programming](https://en.wikipedia.org/wiki/Answer_set_programming). We use only grounded rules. This is a development version: in a near future it will be extended by optimization tools. For definitions and basic algorithms please refer to an [article](https://www.mdpi.com/2076-3417/10/21/7700).
+This [Crystal](https://crystal-lang.org/) module consists of the set of classes to modeling optimization problems 
+by means of [Answer Set Programming](https://en.wikipedia.org/wiki/Answer_set_programming). We use only grounded 
+rules. For definitions and basic algorithms please refer to 
+an [article](https://www.mdpi.com/2076-3417/10/21/7700) and 
+a [textbook](https://www.amazon.com/gp/product/0521147751/ref=dbs_a_def_rwt_hsch_vapi_tpbk_p1_i0).
 
 ## Installation
 
@@ -57,6 +61,65 @@ if answer
   puts
 else
   puts "There is no kernel."
+end
+```
+
+Optimization problems can be solved by associating non-negative weights with atoms. Then,
+we can find an answer set that minimizes or maximizes the sum of weights.
+Take the following two examples ([Maximum Clique](https://en.wikipedia.org/wiki/Clique_(graph_theory))  
+and [Minimum Vertex Cover](https://en.wikipedia.org/wiki/Vertex_cover)) as illustrations.
+
+```crystal
+require "asp"
+include Asp
+
+prog = Program.new
+graph = { vertices: (0..7).to_set, 
+  edges: Set{ {0, 1}, {0, 2}, {0, 3}, {1, 2}, {1, 5}, 
+    {1, 7}, {2, 5}, {2, 7}, {3, 4}, {3, 6}, {4, 6}, {5, 7} } }
+taken = LiteralFactory.new graph[:vertices]
+not_taken = LiteralFactory.new graph[:vertices]
+graph[:vertices].each do |u|
+  prog.addRule ~not_taken[u], implies: taken[u]
+  prog.addRule ~taken[u], implies: not_taken[u]
+  prog.associateWeight 1_i64, with: taken[u].atom
+  graph[:vertices].each do |v|
+    if u < v && !graph[:edges].includes?({u, v})
+      prog.addConstraint taken[u], taken[v]
+    end
+  end
+end
+answer, clique_size = prog.maximize
+if answer
+  print "The clique of size #{clique_size} is:"
+  graph[:vertices].each { |v| print " #{v}" if answer.includes? taken[v].atom }
+  puts
+end
+```
+
+```crystal
+require "asp"
+include Asp
+
+prog = Program.new
+graph = { vertices: (0..7).to_set, 
+  edges: Set{ {0, 1}, {0, 2}, {0, 3}, {0, 6}, {1, 2}, 
+    {1, 3}, {1, 5}, {1, 7}, {2, 7}, {3, 6}, {4, 6}, {5, 7} } }
+taken = LiteralFactory.new graph[:vertices]
+not_taken = LiteralFactory.new graph[:vertices]
+graph[:vertices].each do |u|
+  prog.addRule ~not_taken[u], implies: taken[u]
+  prog.addRule ~taken[u], implies: not_taken[u]
+  prog.associateWeight 1_i64, with: taken[u].atom
+end
+graph[:edges].each do |u, v|
+  prog.addConstraint ~taken[u], ~taken[v]
+end
+answer, cover_size = prog.minimize
+if answer
+  print "The cover of size #{cover_size} is:"
+  graph[:vertices].each { |v| print " #{v}" if answer.includes? taken[v].atom }
+  puts
 end
 ```
 

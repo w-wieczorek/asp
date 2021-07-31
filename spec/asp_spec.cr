@@ -172,7 +172,7 @@ describe Asp do
   it "solves a combinatorial problem (Hamiltonian Cycle)" do
     prog = Asp::Program.new
     Asp::LiteralFactory.reset
-    graph = { vertices: {0, 1, 2}, edges: { {0, 1}, {1, 0}, {1, 2}, {2, 0} } }
+    graph = { vertices: Set{0, 1, 2}, edges: Set{ {0, 1}, {1, 0}, {1, 2}, {2, 0} } }
     taken = Asp::LiteralFactory.new graph[:edges]
     not_taken = Asp::LiteralFactory.new graph[:edges]
     reachable = Asp::LiteralFactory.new graph[:vertices]
@@ -205,7 +205,8 @@ describe Asp do
   it "solves a combinatorial problem (Graph Coloring)" do
     prog = Asp::Program.new
     Asp::LiteralFactory.reset
-    graph = { vertices: {0, 1, 2, 3, 4}, edges: { {0, 1}, {0, 3}, {0, 4}, {1, 2}, {2, 3}, {3, 4} } }
+    graph = { vertices: Set{0, 1, 2, 3, 4}, 
+      edges: Set{ {0, 1}, {0, 3}, {0, 4}, {1, 2}, {2, 3}, {3, 4} } }
     cs = [:red, :green, :blue]
     pairs = [] of {Int32, Symbol}
     graph[:vertices].each { |v| cs.each { |c| pairs << {v, c} } }
@@ -236,8 +237,8 @@ describe Asp do
   it "solves a combinatorial problem (Kernel)" do
     prog = Asp::Program.new
     Asp::LiteralFactory.reset
-    graph = { vertices: {0, 1, 2, 3, 4, 5, 6, 7}, 
-      edges: { {0, 1}, {0, 2}, {1, 2}, {2, 6}, {3, 1}, {3, 2}, {4, 0}, {4, 5} } }
+    graph = { vertices: Set{0, 1, 2, 3, 4, 5, 6, 7}, 
+      edges: Set{ {0, 1}, {0, 2}, {1, 2}, {2, 6}, {3, 1}, {3, 2}, {4, 0}, {4, 5} } }
     taken = Asp::LiteralFactory.new graph[:vertices]
     not_taken = Asp::LiteralFactory.new graph[:vertices]
     outdegree = {} of Int32 => Int32
@@ -278,5 +279,65 @@ describe Asp do
     prog.addRule ~a[3], a[2], implies: a[4]
     prog.determineLevels
     prog.level.should eq({a[1].atom => 0, a[2].atom => 0, a[3].atom => 1, a[4].atom => 1})
+  end
+
+  it "solves a combinatorial optimization problem (Maximum Clique)" do
+    prog = Asp::Program.new
+    Asp::LiteralFactory.reset
+    graph = { vertices: (0..7).to_set, 
+      edges: Set{ {0, 1}, {0, 2}, {0, 3}, {1, 2}, {1, 5}, 
+        {1, 7}, {2, 5}, {2, 7}, {3, 4}, {3, 6}, {4, 6}, {5, 7} } }
+    taken = Asp::LiteralFactory.new graph[:vertices]
+    not_taken = Asp::LiteralFactory.new graph[:vertices]
+    graph[:vertices].each do |u|
+      prog.addRule ~not_taken[u], implies: taken[u]
+      prog.addRule ~taken[u], implies: not_taken[u]
+      prog.associateWeight 1_i64, with: taken[u].atom
+      graph[:vertices].each do |v|
+        if u < v && !graph[:edges].includes?({u, v})
+          prog.addConstraint taken[u], taken[v]
+        end
+      end
+    end
+    answer, clique_size = prog.maximize
+    answer.should be_truthy
+    clique_size.should eq(4_i64)
+    answer.as(Set(Asp::Atom)).should contain(taken[1].atom)
+    answer.as(Set(Asp::Atom)).should contain(taken[2].atom)
+    answer.as(Set(Asp::Atom)).should contain(taken[5].atom)
+    answer.as(Set(Asp::Atom)).should contain(taken[7].atom)
+    answer.as(Set(Asp::Atom)).should contain(not_taken[0].atom)
+    answer.as(Set(Asp::Atom)).should contain(not_taken[3].atom)
+    answer.as(Set(Asp::Atom)).should contain(not_taken[4].atom)
+    answer.as(Set(Asp::Atom)).should contain(not_taken[6].atom)
+  end
+
+  it "solves a combinatorial optimization problem (Minimum Vertex Cover)" do
+    prog = Asp::Program.new
+    Asp::LiteralFactory.reset
+    graph = { vertices: (0..7).to_set, 
+      edges: Set{ {0, 1}, {0, 2}, {0, 3}, {0, 6}, {1, 2}, 
+        {1, 3}, {1, 5}, {1, 7}, {2, 7}, {3, 6}, {4, 6}, {5, 7} } }
+    taken = Asp::LiteralFactory.new graph[:vertices]
+    not_taken = Asp::LiteralFactory.new graph[:vertices]
+    graph[:vertices].each do |u|
+      prog.addRule ~not_taken[u], implies: taken[u]
+      prog.addRule ~taken[u], implies: not_taken[u]
+      prog.associateWeight 1_i64, with: taken[u].atom
+    end
+    graph[:edges].each do |u, v|
+      prog.addConstraint ~taken[u], ~taken[v]
+    end
+    answer, cover_size = prog.minimize
+    answer.should be_truthy
+    cover_size.should eq(4_i64)
+    answer.as(Set(Asp::Atom)).should contain(taken[0].atom)
+    answer.as(Set(Asp::Atom)).should contain(taken[1].atom)
+    answer.as(Set(Asp::Atom)).should contain(taken[6].atom)
+    answer.as(Set(Asp::Atom)).should contain(taken[7].atom)
+    answer.as(Set(Asp::Atom)).should contain(not_taken[2].atom)
+    answer.as(Set(Asp::Atom)).should contain(not_taken[3].atom)
+    answer.as(Set(Asp::Atom)).should contain(not_taken[4].atom)
+    answer.as(Set(Asp::Atom)).should contain(not_taken[5].atom)
   end
 end
