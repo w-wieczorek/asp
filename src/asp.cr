@@ -391,8 +391,8 @@ module Asp
           if lb.subset_of?(ub)
             a = heuristicSelection(ub - lb)
             ub_eval = eval(ub)
-            @heap.insert({lb, ub - Set{a}, -ub_eval})
-            @heap.insert({lb | Set{a}, ub, -ub_eval - @weight[a]})
+            @heap.insert({lb, ub - Set{a}, -ub_eval + @weight[a]})
+            @heap.insert({lb | Set{a}, ub, -ub_eval})
           end
         end
       end
