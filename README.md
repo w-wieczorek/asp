@@ -2,9 +2,10 @@
 
 This [Crystal](https://crystal-lang.org/) module consists of the set of classes to modeling optimization problems 
 by means of [Answer Set Programming](https://en.wikipedia.org/wiki/Answer_set_programming). We use only grounded 
-rules. For definitions and basic algorithms please refer to 
-an [article](https://www.mdpi.com/2076-3417/10/21/7700) and 
-a [textbook](https://www.amazon.com/gp/product/0521147751/ref=dbs_a_def_rwt_hsch_vapi_tpbk_p1_i0).
+rules. For definitions and an underlying algorithm please refer to 
+an [article](javascript:void(0);) that is not ready yet, but there is a great
+[textbook](https://www.amazon.com/gp/product/0521147751/ref=dbs_a_def_rwt_hsch_vapi_tpbk_p1_i0)
+on the topic.
 
 ## Installation
 
