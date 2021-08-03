@@ -78,89 +78,6 @@ module Asp
     x
   end
 
-  def self.narrow(pi, lb, ub)
-    u_changed = true
-    l_changed = true
-    pi_u = Set(Rule).new
-    pi_l = Set(Rule).new
-    while u_changed || l_changed
-      if u_changed
-        pi_u = reduct pi, ub
-      end
-      if l_changed
-        pi_l = reduct pi, lb
-      end
-      before_size = lb.size
-      lb.concat(cn pi_u)
-      l_changed = (lb.size != before_size)
-      before_size = ub.size
-      ub = ub & cn(pi_l)
-      u_changed = (ub.size != before_size)
-    end
-    {lb, ub}
-  end
-
-  class Heap(T)
-    # T is a tuple with the last element being priority
-    
-    def initialize
-      @arr = Array(T).new(1024)
-      @heap_size = 0
-    end
-
-    private def parent(i)
-      i//2
-    end
-
-    private def left(i)
-      2*i
-    end
-
-    private def right(i)
-      2*i + 1
-    end
-
-    private def heapify(i)
-      l = left(i)
-      r = right(i)
-      smallest = l <= @heap_size && @arr[l][-1] < @arr[i][-1] ? l : i
-      smallest = r if r <= @heap_size && @arr[r][-1] < @arr[smallest][-1]
-      if smallest != i
-        @arr.swap(i, smallest)
-        heapify(smallest)
-      end
-    end
-
-    def extract : T
-      m = @arr[0]
-      @arr[0] = @arr[@heap_size - 1]
-      @heap_size -= 1
-      heapify 0
-      m
-    end
-
-    def insert(el : T)
-      @heap_size += 1
-      if @arr.size < @heap_size
-        @arr << el
-      end
-      i = @heap_size - 1
-      while i > 0 && @arr[parent(i)][-1] > el[-1]
-        @arr[i] = @arr[parent(i)]
-        i = parent(i)
-      end
-      @arr[i] = el
-    end
-
-    def clear
-      @heap_size = 0
-    end
-
-    def empty?
-      @heap_size == 0
-    end
-  end
-
   class Program
     include Iterator(Set(Atom))
 
@@ -199,51 +116,6 @@ module Asp
         new_pairs.clear
       end
       dependences
-    end
-
-    def determineLevels
-      @level.clear
-      dependences = determineDependences
-      partition = [] of Set(Atom)
-      eq_class = {} of Atom => Set(Atom)
-      @atoms.each { |a| eq_class[a] = Set{a} }
-      dependences.each do |a, b|
-        if a != b && dependences.includes?({b, a}) && !eq_class[a].same?(eq_class[b])
-          eq_class[a].concat eq_class[b]
-          eq_class[b] = eq_class[a]
-        end
-      end
-      partition = eq_class.values.uniq
-      less_than = Set({Set(Atom), Set(Atom)}).new
-      n = partition.size
-      (0...n).each do |i|
-        (0...n).each do |j|
-          if i != j
-            partition[i].each do |p|
-              partition[j].each do |q|
-                less_than.add({partition[i], partition[j]}) if dependences.includes?({q, p})
-              end
-            end
-          end
-        end
-      end
-      level_of_eq_class = {} of Set(Atom) => Int32
-      (0...n).each { |i| level_of_eq_class[partition[i]] = 0 }
-      current_level = 0
-      until (n = partition.size) == 0
-        (0...n).each do |i|
-          (0...n).each do |j|
-            if i != j && less_than.includes?({partition[i], partition[j]})
-              level_of_eq_class[partition[j]] = current_level + 1
-            end
-          end
-        end
-        partition.reject! { |eqc| level_of_eq_class[eqc] == current_level }
-        current_level += 1
-      end
-      level_of_eq_class.each do |eqc, lev|
-        eqc.each { |a| @level[a] = lev }
-      end
     end
 
     def associateWeight(w : Int64, with atom)
@@ -310,10 +182,6 @@ module Asp
       _addConstraint(body)
     end
 
-    private def heuristicSelection(soa : Set(Atom))
-      soa.min_by { |a| @level[a] }
-    end
-
     def next
       if @solution_procedure_started == false
         @solution_procedure_started = true
@@ -341,63 +209,3 @@ module Asp
     private def eval(soa : Set(Atom)) : Int64
       soa.sum(0_i64) { |a| @weight[a] }
     end
-
-    def minimize
-      @solution_procedure_started = true
-      determineLevels
-      best_weight = Int64::MAX
-      best_answer : Set(Atom)? = nil
-      @heap.clear
-      @heap.insert({Set(Atom).new, @atoms, 0_i64})
-      until @heap.empty?
-        lb, ub, lb_eval = @heap.extract
-        next if lb_eval >= best_weight
-        lb, ub = Asp.narrow(@rules, lb, ub)
-        if lb == ub
-          if (lb_eval = eval(lb)) < best_weight
-            best_answer = lb
-            best_weight = lb_eval
-          end
-        else
-          if lb.subset_of?(ub)
-            a = heuristicSelection(ub - lb)
-            lb_eval = eval(lb)
-            @heap.insert({lb, ub - Set{a}, lb_eval})
-            @heap.insert({lb | Set{a}, ub, lb_eval + @weight[a]})
-          end
-        end
-      end
-      @solution_procedure_started = false
-      {best_answer, best_weight}
-    end
-
-    def maximize
-      @solution_procedure_started = true
-      determineLevels
-      best_weight = Int64::MIN
-      best_answer : Set(Atom)? = nil
-      @heap.clear
-      @heap.insert({Set(Atom).new, @atoms, 0_i64})
-      until @heap.empty?
-        lb, ub, ub_eval = @heap.extract
-        next if -ub_eval <= best_weight
-        lb, ub = Asp.narrow(@rules, lb, ub)
-        if lb == ub
-          if (ub_eval = eval(ub)) > best_weight
-            best_answer = ub
-            best_weight = ub_eval
-          end
-        else
-          if lb.subset_of?(ub)
-            a = heuristicSelection(ub - lb)
-            ub_eval = eval(ub)
-            @heap.insert({lb, ub - Set{a}, -ub_eval + @weight[a]})
-            @heap.insert({lb | Set{a}, ub, -ub_eval})
-          end
-        end
-      end
-      @solution_procedure_started = false
-      {best_answer, best_weight}
-    end
-  end
-end
