@@ -1,6 +1,7 @@
 module Asp
   alias Atom = UInt32
   alias Rule = NamedTuple(head: Atom, positives: Set(Atom), negatives: Set(Atom))
+  alias Graph = Array(Tuple(Atom, Atom))
 
   struct Literal
     property atom : Atom
@@ -79,54 +80,27 @@ module Asp
   end
 
   class Program
-    include Iterator(Set(Atom))
-
-    getter atoms, rules, level
+    getter atoms, rules
 
     def initialize
-      @solution_procedure_started = false
       @atoms = Set(Atom).new
+      @arr_of_atoms = [] of Atom
+      @s_set = Array(Atom).new
+      @g_set = Graph.new
+      @stack = Array(Tuple(Int32, Int32, Int32, Int32)).new
       @rules = Set(Rule).new
-      @heap = Heap(Tuple(Set(Atom), Set(Atom), Int64)).new
-      @level = {} of Atom => Int32
+      @num_of_rules = Hash(Atom, Int32).new(0)
       proc = ->(hash : Hash(Atom, Int64), key : Atom) { hash[key] = 0_i64 }
       @weight = Hash(Atom, Int64).new(proc)
     end
 
-    def determineDependences
-      dependences = Set({Atom, Atom}).new
-      @atoms.each { |a| dependences.add({a, a}) }
-      @rules.each do |r|
-        r[:positives].each { |b| dependences.add({r[:head], b}) }
-        r[:negatives].each { |b| dependences.add({r[:head], b}) }
-      end
-      finish_loop = false
-      new_pairs = [] of {Atom, Atom}
-      until finish_loop
-        finish_loop = true
-        @atoms.each do |a|
-          dependences.each do |c, b|
-            if dependences.includes?({a, c}) && !dependences.includes?({a, b})
-              new_pairs << {a, b}
-              finish_loop = false
-            end 
-          end
-        end
-        dependences.concat new_pairs unless finish_loop
-        new_pairs.clear
-      end
-      dependences
-    end
-
     def associateWeight(w : Int64, with atom)
-      raise "Cannot change model during solving!" if @solution_procedure_started
       raise "Weight cannot be negative!" if w < 0_i64
       @weight[atom] = w
     end
 
     private def _addRule(body, head)
       raise "The head cannot be negated!" if head.negated
-      raise "Cannot change model during solving!" if @solution_procedure_started
       pos_set = Set(Atom).new
       neg_set = Set(Atom).new
       body.each do |literal|
@@ -136,10 +110,16 @@ module Asp
           pos_set.add(literal.atom)
         end
       end
-      @rules.add({head: head.atom, positives: pos_set, negatives: neg_set})
-      @atoms.add(head.atom)
-      @atoms.concat(pos_set)
-      @atoms.concat(neg_set)
+      if @rules.add?({head: head.atom, positives: pos_set, negatives: neg_set})
+        @atoms.add(head.atom)
+        @atoms.concat(pos_set)
+        @atoms.concat(neg_set)
+        if @num_of_rules.has_key? head.atom
+          @num_of_rules[head.atom] += 1
+        else
+          @num_of_rules[head.atom] = 1
+        end
+      end
     end
 
     def addRule(*body, implies head)
@@ -151,14 +131,10 @@ module Asp
     end
 
     def addFact(head)
-      raise "The head cannot be negated!" if head.negated
-      raise "Cannot change model during solving!" if @solution_procedure_started
-      @rules.add({head: head.atom, positives: Set(Atom).new, negatives: Set(Atom).new})
-      @atoms.add(head.atom)
+      _addRule([] of Literal, head)
     end
 
     private def _addConstraint(body)
-      raise "Cannot change model during solving!" if @solution_procedure_started
       pos_set = Set(Atom).new
       neg_set = Set(Atom).new
       body.each do |literal|
@@ -182,30 +158,118 @@ module Asp
       _addConstraint(body)
     end
 
-    def next
-      if @solution_procedure_started == false
-        @solution_procedure_started = true
-        determineLevels
-        @heap.clear
-        @heap.insert({Set(Atom).new, @atoms, @atoms.size.to_i64})
+    private def put(elem : U, arr : Array(U), at idx) forall U
+      if arr.size > idx
+        arr[idx] = elem
+      else
+        arr << elem
       end
-      until @heap.empty?
-        lb, ub, priority = @heap.extract
-        lb, ub = Asp.narrow(@rules, lb, ub)
-        if lb == ub
-          return lb
-        else
-          if lb.subset_of?(ub)
-            a = heuristicSelection(ub - lb)
-            @heap.insert({lb, ub - Set{a}, (ub.size - lb.size - 1).to_i64})
-            @heap.insert({lb | Set{a}, ub, (ub.size - lb.size - 1).to_i64})
+    end
+
+    def satisfies?(context : Set(Atom), rule : Rule)
+      return true if context.intersects? rule[:negatives]
+      if context.superset_of? rule[:positives]
+        context.includes? rule[:head]
+      else
+        true
+      end
+    end
+
+    private def find_nth_rule(idx, atom) : Rule
+      counter = 0
+      @rules.each do |r|
+        if r[:head] == atom
+          counter += 1
+          return r if counter == idx
+        end
+      end
+      raise "Connot find #{idx}th rule!"
+    end
+
+    def answer?(context : Set(Atom))
+      red = Asp.reduct(@rules, context)
+      x = Asp.cn(red)
+      context == x
+    end
+
+    private def dfs(g, len, s)
+      dist = Hash(Atom, Float32).new(Float32::INFINITY)
+      dist[s] = 0_f32
+      q = Deque{s}
+      until q.empty?
+        u = q.shift
+        (0...len).each do |i|
+          w, v = g[i]
+          if u == w && dist[v] == Float32::INFINITY
+            q.push v
+            dist[v] = dist[u] + 1_f32
           end
         end
       end
-      @solution_procedure_started = false
-      stop
+      dist
+    end
+
+    def add_to_graph?(len : Int32, head : Atom, pos : Set(Atom))
+      pos.each do |a|
+        dist = dfs @g_set, len, head
+        if dist[a] < Float32::INFINITY
+          return false
+        else
+          put({a, head}, @g_set, len)
+          len += 1
+        end
+      end
+      true
+    end
+
+    def solve
+      s_len = 0
+      @stack.clear
+      @rules.each do |r|
+        if r[:positives].empty? && r[:negatives].empty?
+          put r[:head], @s_set, at: s_len
+          s_len += 1
+        end
+      end
+      @arr_of_atoms = @atoms.to_a
+      @stack.push({0, 0, 1, s_len})
+      until @stack.empty?
+        a_idx, g_len, r_idx, s_len = @stack.pop
+        if r_idx == 1 && a_idx + 1 < @arr_of_atoms.size
+          @stack.push({a_idx + 1, g_len, 1, s_len})
+        end
+        context = Slice.new(@s_set.to_unsafe, s_len).to_set
+        if answer?(context)
+          return context
+        end
+        continue_loop = true
+        while continue_loop && a_idx < @arr_of_atoms.size
+          a = @arr_of_atoms[a_idx]
+          unless context.includes?(a)
+            while continue_loop && r_idx <= @num_of_rules[a]
+              r = find_nth_rule(r_idx, a)
+              if !r[:negatives].includes?(a) && !context.intersects?(r[:negatives]) && add_to_graph?(g_len, a, r[:positives])
+                @stack.push({a_idx, g_len, r_idx + 1, s_len})
+                g_len += r[:positives].size
+                put a, @s_set, at: s_len
+                s_len += 1
+                r[:positives].each do |b|
+                  put b, @s_set, at: s_len
+                  s_len += 1
+                end
+                continue_loop = false
+                @stack.push({a_idx + 1, g_len, 1, s_len})
+              end
+              r_idx += 1
+            end
+          end
+          a_idx += 1
+        end
+      end
     end
 
     private def eval(soa : Set(Atom)) : Int64
       soa.sum(0_i64) { |a| @weight[a] }
     end
+  end
+end

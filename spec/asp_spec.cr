@@ -2,18 +2,6 @@ require "spec"
 require "../src/asp.cr"
 
 describe Asp do
-  it "includes a class for priority queue" do
-    q = Asp::Heap(Tuple(String, Int32)).new
-    q.insert({"Ala", 7})
-    q.empty?.should be_false
-    q.insert({"Grażyna", 3})
-    q.insert({"Ewa", 10})
-    q.extract.should eq({"Grażyna", 3})
-    q.extract.should eq({"Ala", 7})
-    q.extract.should eq({"Ewa", 10})
-    q.empty?.should be_true
-  end
-
   it "creates a rule and adds it to a logic program" do
     prog = Asp::Program.new
     p = Asp::LiteralFactory.new (0..3)
@@ -103,76 +91,58 @@ describe Asp do
     computed6.should eq(expected6)
   end
 
-  it "can narrow" do
+  it "computes answer sets for a simple program 1" do
     prog = Asp::Program.new
     Asp::LiteralFactory.reset
-    q = Asp::LiteralFactory.new (1..6)
-    prog.addFact q[1]
-    prog.addRule ~q[1], implies: q[2]
-    prog.addRule q[1], ~q[4], implies: q[3]
-    prog.addRule ~q[3], ~q[5], implies: q[4]
-    prog.addRule q[2], ~q[6], implies: q[5]
-    prog.addRule q[5], implies: q[5]
-    pi = prog.rules
-    lb = Set(Asp::Atom).new
-    ub = Set{q[1].atom, q[2].atom, q[3].atom, q[4].atom, q[5].atom, q[6].atom}
-    lb, ub = Asp.narrow(pi, lb, ub)
-    lb.should eq(Set{q[1].atom})
-    ub.should eq(Set{q[1].atom, q[3].atom, q[4].atom})
+    a = Asp::LiteralFactory.new [0]
+    prog.addRule a[0], implies: a[0]
+    prog.solve.should eq(Set(Asp::Atom).new)
   end
 
-  it "computes answer sets for simple programs" do
+  it "computes answer sets for a simple program 2" do
     prog = Asp::Program.new
     Asp::LiteralFactory.reset
     a = Asp::LiteralFactory.new [0, 1]
-    prog.addRule a[0], implies: a[0]
-    prog.first?.should eq(Set(Asp::Atom).new)
-    prog = Asp::Program.new
     prog.addRule ~a[1], implies: a[0]
-    prog.first?.should eq(Set{a[0].atom})
-    prog = Asp::Program.new
-    prog.addRule ~a[0], implies: a[0]
-    prog.first?.should be_nil
-    prog = Asp::Program.new
-    prog.addRule ~a[1], implies: a[0]
-    prog.addRule ~a[0], implies: a[1]
-    result = Set(Set(Asp::Atom)).new
-    prog.each { |answer| result << answer }
-    result.should eq(Set{Set{a[0].atom}, Set{a[1].atom}})
-    prog.addRule ~a[0], implies: a[0]
-    result.clear
-    prog.each { |answer| result << answer }
-    result.should eq(Set{Set{a[0].atom}})
+    prog.solve.should eq(Set{a[0].atom})
   end
 
-  it "computes all answer sets" do
+  it "computes answer sets for a simple program 3" do
     prog = Asp::Program.new
     Asp::LiteralFactory.reset
-    a = Asp::LiteralFactory.new [1, 2]
-    e = Asp::LiteralFactory.new [1, 2]
-    d = Asp::LiteralFactory.new [1, 2]
-    c = Asp::LiteralFactory.new [{1, 1}, {1, 2}, {2, 1}, {2, 2}]
-    (1..2).each do |x|
-      prog.addFact d[x]
-      prog.addRule d[x], ~e[x], implies: a[x]
-      prog.addRule d[x], ~a[x], implies: e[x]
-      (1..2).each { |y| prog.addRule a[x], a[y], implies: c[x, y] }
-    end
-    expected = Set(Set(Asp::Atom)).new
-    expected.add Set{d[1].atom, d[2].atom, a[1].atom, a[2].atom, c[1, 1].atom,
-      c[2, 1].atom, c[1, 2].atom, c[2, 2].atom}
-    expected.add Set{d[1].atom, d[2].atom, a[1].atom, e[2].atom, c[1, 1].atom}
-    expected.add Set{d[1].atom, d[2].atom, e[1].atom, a[2].atom, c[2, 2].atom}
-    expected.add Set{d[1].atom, d[2].atom, e[1].atom, e[2].atom}
-    computed = Set(Set(Asp::Atom)).new
-    prog.each { |answer| computed.add answer }
-    computed.should eq(expected)
+    a = Asp::LiteralFactory.new [0]
+    prog.addRule ~a[0], implies: a[0]
+    prog.solve.should be_nil
+  end
+
+  it "computes answer sets for a simple program 4" do
+    prog = Asp::Program.new
+    Asp::LiteralFactory.reset
+    a = Asp::LiteralFactory.new [0, 1]
+    prog.addRule ~a[1], implies: a[0]
+    prog.addRule ~a[0], implies: a[1]
+    prog.addConstraint a[1]
+    result = prog.solve
+    result.should eq(Set{a[0].atom})
+  end
+
+  it "computes answer sets for a simple program 5" do
+    prog = Asp::Program.new
+    Asp::LiteralFactory.reset
+    a = Asp::LiteralFactory.new (1..5)
+    prog.addRule a[2], a[3], ~a[4], ~a[5], implies: a[1]
+    prog.addRule ~a[3], implies: a[2]
+    prog.addRule a[1], a[4], implies: a[3]
+    prog.addConstraint a[4], ~a[5]
+    prog.addFact a[5]
+    result = prog.solve
+    result.should eq(Set{a[2].atom, a[5].atom})
   end
 
   it "solves a combinatorial problem (Hamiltonian Cycle)" do
     prog = Asp::Program.new
     Asp::LiteralFactory.reset
-    graph = { vertices: Set{0, 1, 2}, edges: Set{ {0, 1}, {1, 0}, {1, 2}, {2, 0} } }
+    graph = { vertices: Set{0, 1, 2}, edges: Set{ {0, 1}, {1, 2}, {2, 0} } }
     taken = Asp::LiteralFactory.new graph[:edges]
     not_taken = Asp::LiteralFactory.new graph[:edges]
     reachable = Asp::LiteralFactory.new graph[:vertices]
@@ -194,12 +164,11 @@ describe Asp do
         end
       end
     end
-    result = prog.first?
+    result = prog.solve
     result.should be_truthy
     result.as(Set(Asp::Atom)).should contain(taken[0, 1].atom)
     result.as(Set(Asp::Atom)).should contain(taken[1, 2].atom)
     result.as(Set(Asp::Atom)).should contain(taken[2, 0].atom)
-    result.as(Set(Asp::Atom)).should contain(not_taken[1, 0].atom)
   end
 
   it "solves a combinatorial problem (Graph Coloring)" do
@@ -228,13 +197,13 @@ describe Asp do
     prog.addFact color[0, :red]
     prog.addFact color[1, :blue]
     prog.addFact color[3, :green]
-    result = prog.first?
+    result = prog.solve
     result.should be_truthy
     result.as(Set(Asp::Atom)).should contain(color[2, :red].atom)
     result.as(Set(Asp::Atom)).should contain(color[4, :blue].atom)
   end
 
-  it "solves a combinatorial problem (Kernel)" do
+  pending "solves a combinatorial problem (Kernel)" do
     prog = Asp::Program.new
     Asp::LiteralFactory.reset
     graph = { vertices: Set{0, 1, 2, 3, 4, 5, 6, 7}, 
@@ -257,7 +226,7 @@ describe Asp do
     graph[:edges].each do |u, v|
       prog.addConstraint taken[u], taken[v]
     end
-    result = prog.first?
+    result = prog.solve
     result.should be_truthy
     result.as(Set(Asp::Atom)).should contain(taken[1].atom)
     result.as(Set(Asp::Atom)).should contain(taken[5].atom)
@@ -269,19 +238,7 @@ describe Asp do
     result.as(Set(Asp::Atom)).should contain(not_taken[4].atom)
   end
 
-  it "determines levels of atoms" do
-    prog = Asp::Program.new
-    Asp::LiteralFactory.reset
-    a = Asp::LiteralFactory.new (1..4)
-    prog.addRule ~a[2], implies: a[1]
-    prog.addRule ~a[1], implies: a[2]
-    prog.addRule ~a[4], a[1], implies: a[3]
-    prog.addRule ~a[3], a[2], implies: a[4]
-    prog.determineLevels
-    prog.level.should eq({a[1].atom => 0, a[2].atom => 0, a[3].atom => 1, a[4].atom => 1})
-  end
-
-  it "solves a combinatorial optimization problem (Maximum Clique)" do
+  pending "solves a combinatorial optimization problem (Maximum Clique)" do
     prog = Asp::Program.new
     Asp::LiteralFactory.reset
     graph = { vertices: (0..7).to_set, 
@@ -312,7 +269,7 @@ describe Asp do
     answer.as(Set(Asp::Atom)).should contain(not_taken[6].atom)
   end
 
-  it "solves a combinatorial optimization problem (Minimum Vertex Cover)" do
+  pending "solves a combinatorial optimization problem (Minimum Vertex Cover)" do
     prog = Asp::Program.new
     Asp::LiteralFactory.reset
     graph = { vertices: (0..7).to_set, 
