@@ -14,7 +14,7 @@ a [textbook](https://www.amazon.com/gp/product/0521147751/ref=dbs_a_def_rwt_hsch
    dependencies:
      asp:
        github: w-wieczorek/asp
-       branch: master
+       branch: old-state
    ```
 
 2. Run `shards install`
